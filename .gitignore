@@ -1,3 +1,10 @@
 testdb/testdb.csv
 .env
 .venv/
+ (2).env
+db/testdb.csv
+backend/services/__pycache__/
+backend/models/__pycache__/
+backend/db/__pycache__/
+backend/api/__pycache__/
+backend/__pycache__/
