@@ -4,6 +4,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 from datetime import datetime
 from backend.models.csv_row import CsvRow
+import re
 
 # Header mapping from CSV → DB model
 COLUMN_MAP = {
@@ -28,6 +29,12 @@ COLUMN_MAP = {
     "Code": "code",
     "Tier": "tier"
 }
+
+def parse_overage_rate(value):
+    if value:
+        value = re.sub(r"[^\d]", "", value)
+        return float(value) if value else 0.0
+    return 0.0
 
 def parse_date(value):
     try:
@@ -73,6 +80,7 @@ async def store_csv_to_db(file: UploadFile, db: Session):
         record["promotion_price"] = clean_price(record.get("promotion_price"))
         record["original_price"] = clean_price(record.get("original_price"))
         record["activation_fee"] = clean_price(record.get("activation_fee"))
+        record["overage_rate"] = parse_overage_rate(record.get("overage_rate"))
 
         try:
             row = CsvRow(**record)

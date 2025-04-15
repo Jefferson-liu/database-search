@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Float, String, DateTime, Date
 from backend.db.base import Base
 
 class CsvRow(Base):
-    __tablename__ = "csv_rows"
+    __tablename__ = "phone_plans_db"
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(String)
     item_name = Column(String)
@@ -17,7 +17,7 @@ class CsvRow(Base):
     data = Column(String)
     gb = Column(String)
     original_price = Column(Float)
-    overage_rate = Column(String)
+    overage_rate = Column(Float)
     roaming = Column(String)
     byod_or_term = Column(String)
     free_ld = Column(String)
