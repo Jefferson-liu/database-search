@@ -11,8 +11,8 @@ if os.getenv("ENV") == "dev":
     # Drop all tables in dev mode for testing purposes
     print("Dropping all tables...")
     # WARNING: This will drop all tables in the database, use with caution!
-    Base.metadata.drop_all(bind=engine)    # DANGER: Drops all tables
-    Base.metadata.create_all(bind=engine)
+    #Base.metadata.drop_all(bind=engine)    # DANGER: Drops all tables
+    #Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
