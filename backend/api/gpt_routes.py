@@ -1,32 +1,16 @@
-from fastapi import APIRouter
-from backend.services.embedding_service import search, row_to_text
-import openai
-import os
-
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from backend.db.session import get_db
+from backend.services.query_service import query_model
+from backend.schemas.query import QueryRequest
 router = APIRouter()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-def get_gpt_answer(query, context_texts):
-    prompt = f"""You are a helpful assistant. Use the following context to answer the question.
-
-Context:
-{context_texts}
-
-Question:
-{query}
-
-Answer:"""
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
-
-@router.get("/ask")
-def ask_gpt(query: str):
-    rows = search(query)
-    context = "\n".join([row_to_text(r) for r in rows])
-    answer = get_gpt_answer(query, context)
-    return {"answer": answer}
+@router.post("/query")
+async def query_phone_plans(req: QueryRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        response = await query_model(db, req)
+    except HTTPException as he:
+        raise he 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return response
