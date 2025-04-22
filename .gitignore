@@ -1,10 +1,7 @@
-testdb/testdb.csv
+testdb/
 .venv/
  (2).env
 db/testdb.csv
-backend/services/__pycache__/
-backend/models/__pycache__/
-backend/db/__pycache__/
-backend/api/__pycache__/
-backend/__pycache__/
+__pycache__/
 .env
+backend/schemas/__pycache__/query.cpython-39.pyc
