@@ -4,4 +4,4 @@ testdb/
 db/testdb.csv
 __pycache__/
 .env
-backend/schemas/__pycache__/query.cpython-39.pyc
+*.pyc
