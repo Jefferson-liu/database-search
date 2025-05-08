@@ -1,7 +1,6 @@
 import pandas as pd
 import io
 from fastapi import UploadFile, HTTPException
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from backend.models.csv_row import CsvRow
@@ -86,7 +85,7 @@ async def store_csv_to_db(file: UploadFile, db: AsyncSession) -> str:
     records = df.to_dict(orient="records")
 
     try:
-
+        
         await db.execute(text("DELETE FROM phone_plans_db"))
         saved = 0
         for record in records:
@@ -98,6 +97,7 @@ async def store_csv_to_db(file: UploadFile, db: AsyncSession) -> str:
             record["activation_fee"] = clean_price(record.get("activation_fee"))
             record["overage_rate"] = parse_overage_rate(record.get("overage_rate"))
             record["data"] = parse_data(record.get("data"), record.get("gb", ""))
+            record["roaming"] = [country.lower().strip() for country in record.get("roaming", "").split(",")] if record.get("roaming") else None
             record.pop("gb", None)
             row = CsvRow(**record)
             db.add(row)
@@ -106,7 +106,7 @@ async def store_csv_to_db(file: UploadFile, db: AsyncSession) -> str:
         await update_embeddings(db)
 
         await db.commit()
-        return f"✅ {saved} rows saved and embedded."
+        return saved
 
     except Exception as e:
         await db.rollback()

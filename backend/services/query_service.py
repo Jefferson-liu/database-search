@@ -1,10 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from fastapi import HTTPException
+from sqlalchemy import select, bindparam
+from pgvector.sqlalchemy import Vector
 import textwrap
 import json
-from backend.models.csv_row import CsvRow
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -17,7 +16,6 @@ from backend.services.provider_name_service import get_unique_providers
 load_dotenv()
 
 client = OpenAI()
-router = APIRouter()
 embedding_model = os.getenv("EMBEDDING_MODEL")
 gpt_model = os.getenv("GPT_MODEL")
 model = SentenceTransformer(embedding_model)  # same model as used in embedding
@@ -30,10 +28,10 @@ async def filter_model(request: QueryRequest, providers: list):
             Extract the following fields as a JSON object:
             - `preferred_providers`: list of providers the customer wants (if mentioned)
             - `exclude_providers`: list of providers the customer currently uses or dislikes
-            - `roaming`: list of countries the customer wants to roam in, this means vacationing or business or any forms of roaming (if mentioned)
+            - `roaming`: list of full names of countries the customer wants to roam in, this means vacationing or business or any forms of roaming (if mentioned)
             - `byod`: true if they mention "bring your own device" or "no contract"
-            - `target_price`: the price that the customer is looking for (if mentioned)
-            - `target_data`: the data that the customer is looking for, convert the value to GB (if mentioned)
+            - `target_price`: the price that the customer is looking for (if mentioned), this can ONLY be an integer or float, do not include the dollar sign or any other characters or descriptors like "cheapest"
+            - `target_data`: the data that the customer is looking for, convert the value to GB (if mentioned) this can ONLY be an integer or float, do not include the dollar sign or any other characters or descriptors like "cheapest" or "expensive"
             
             If the provider names are mispelled, correct them to the closest match from the list of providers:
             {providers}
@@ -52,7 +50,7 @@ async def filter_model(request: QueryRequest, providers: list):
             Assistant:
             {
             "exclude_providers": ["Bell"],
-            "roaming": USA,
+            "roaming": ["united states", "china"]
             }
 
             **Example 2**
@@ -73,18 +71,40 @@ async def filter_model(request: QueryRequest, providers: list):
             Assistant:
             {
             "target_data": 20,
-            "roaming": ["Canada"],
+            "roaming": ["canada"],
+            }
+
+            **Example 4**
+
+            User: I am using Bell give me the cheapest plans
+
+            Assistant:
+            {
+            "exclude_providers": ["Bell"],
+            }
+
+            **Example 5**
+
+            User: I am using Rogers give me the cheapest plans
+
+            Assistant:
+            {
+            "exclude_providers": ["Rogers"],
             }
 
             Now extract filters from this user request:
         """ + "User: " + request.question)
         
+        messages = [{"role": "user", "content": prompt}]
         response = client.chat.completions.create(
             model=gpt_model,
-            messages=[{"role": "user", "content": prompt}],
+            messages= messages,
             temperature=0.2,
+            store=True,
         )
         string_response = response.choices[0].message.content
+
+        #await log_response(messages = messages, user_id = request.user_id)
         try:
             filters = json.loads(string_response)
         except json.JSONDecodeError as e:
@@ -96,48 +116,59 @@ async def filter_model(request: QueryRequest, providers: list):
 
 
 
-async def query_model(db: AsyncSession, request: QueryRequest, k: int = 5):
+async def query_model(db: AsyncSession, request: QueryRequest, k: int = 20, message_history: list = None):
     try:
-        providers = await get_unique_providers(db)
-        providers = providers["providers"]
+        providers = (await get_unique_providers(db))["providers"]
+        print("Providers: ", providers)
         filter_model_response = await filter_model(request, providers)
-        filtered_query, filtered_sql, params = await filters_to_search_prompt(filter_model_response, providers)
-        query_embedding = model.encode([filtered_query])[0].tolist()
-        vector_string = f"[{', '.join(str(x) for x in query_embedding)}]"
-        sql = text(f"""
-            WITH filtered AS (
-                   {filtered_sql}  
-            )
-            SELECT *
-            FROM phone_plans_db
-            ORDER BY embedding <-> :embedding
-            LIMIT :k
-        """).columns(*CsvRow.__table__.columns)
-        result = await db.execute(sql, {"embedding": vector_string, "k": k, **params})
+        print(filter_model_response)
+
+        # Generate prompt and Core filter subquery
+        filtered_prompt, filtered_stmt, filtered_params = filters_to_search_prompt(filter_model_response, providers)
+        print("Filtered Prompt: ", filtered_prompt)
+        print("Filtered SQL: ", str(filtered_stmt))
+
+        # Vector embedding
+        query_embedding = model.encode([filtered_prompt])[0].tolist()
+
+        filtered_subquery = filtered_stmt.subquery("filtered")
+        order_expr = filtered_subquery.c.embedding.op("<->")(bindparam("embedding", type_=Vector(384)))
+        final_stmt = (
+            select(filtered_subquery)
+            .order_by(order_expr)
+            .limit(bindparam("k"))
+        )
+
+        result = await db.execute(final_stmt, {
+            **filtered_params,
+            "embedding": query_embedding,
+            "k": k
+        })
         rows = result.mappings().all()
 
         if not rows:
             raise HTTPException(status_code=404, detail="No results found.")
         context = "\n".join([row_to_text_dict(r) for r in rows])
-        columns = "|".join([col.name for col in CsvRow.__table__.columns])
 
         # I use dedent here to just remove the indents from the prompt but keep the new lines
         # This is just for readability for developers, but the indentation can only complicate the model so I remove it
         prompt = textwrap.dedent(f"""
-            Use the following phone plan data to answer the user's question.
-            Provide 2 or 3 point form reasons why the customer would like the recommended plans with priority to things listed in the question.
-            Do not include any other information unless asked in the prompt.
-            Use the data to find the top {request.k} phone plans for the user.
-            Do not hallucinate or make up any information. Only use and return the data provided 
-            Notes:
-            - The roaming column denotes that the countries in that column have free roaming.
-            - The byod column denotes that the plan is a "bring your own device" plan.
-            - Assume the user is in Canada so overseas means outside of Canada.
-            Each row is a phone plan with fields in this order:
-            {columns}
+            Use the following data to answer the user's question.
+            You must return **exactly {request.k} plans** from the list below. Use this strict logic:
+            If the user says that they are currently using a provider, exclude all plans from that provider before any filtering is done.
+            Then apply the following ranking logic:
+            1. If fewer than 3 valid plans are found, list all and state clearly: "Only X plans met the criteria."
+            2. If more than 3 valid plans are found, choose the 3 with:
+                - Lowest promotion price first
+                - Then highest data
+                - Then most countries in the roaming list
+            3. Each plan must be **clearly listed**, and followed by 2-3 point-form reasons the user would like it.
+            4. Do NOT skip any matching plans. Do NOT combine similar plans. Do NOT hallucinate.
 
+            - If the user says that they are currently using a provider, ignore and do not let it influence your answer besides filtering the plans out
+
+            ---
             Phone Plans:
-            {columns}
             {context}
 
             Question:
@@ -146,16 +177,26 @@ async def query_model(db: AsyncSession, request: QueryRequest, k: int = 5):
             Answer:
         """)
 
-        # Example with OpenAI
+        if not message_history:
+            messages = [{"role": "system", "content": "You are a helpful business assistant. Do not answer anything unless it can be backed up with retrieved knowledge or structured data. If unsure, say 'I don't know based on the available data.' Do not make assumptions, do not hallucinate. Respond in the language you are asked in"},
+                        {"role": "user", "content": prompt}]
+        else:
+            cleaned_history = [{"role": m["role"], "content": m["content"]} for m in message_history if m["content"]]
+            messages = [{"role": "system", "content": "You are a helpful business assistant. Do not answer anything unless it can be backed up with retrieved knowledge or structured data. If unsure, say 'I don't know based on the available data.' Do not make assumptions, do not hallucinate."},
+                        *cleaned_history,
+                        {"role": "user", "content": prompt}]
         response = client.chat.completions.create(
             model=gpt_model,
-            messages=[{"role": "system", "content": "You are a helpful business assistant. Do not answer anything unless it can be backed up with retrieved knowledge or structured data. If unsure, say 'I don’t know based on the available data.' Do not make assumptions, do not hallucinate."},
-                      {"role": "user", "content": prompt}],
+            messages=messages,
             temperature=0.3,
+            store=True,
         )
 
         answer = response.choices[0].message.content
-        return {"answer": answer, "filtered_model": filter_model_response, "filtered_sql": filtered_sql, context: context, "prompt": prompt}
+        messages.append({"role": "assistant", "content": answer})
+        #await log_response(request.question, prompt, answer, request.user_id)
+        #print(str(final_stmt), str(filtered_subquery), filtered_params)
+        return {"answer": answer, "filtered_model": filter_model_response, "filtered_sql": str(filtered_subquery), "context": context, "prompt": prompt, "messages": messages}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {e}")
