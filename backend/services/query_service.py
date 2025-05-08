@@ -200,3 +200,40 @@ async def query_model(db: AsyncSession, request: QueryRequest, k: int = 5, messa
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {e}")
+
+async def search_query_model(db: AsyncSession, request: QueryRequest, k: int = 5, requirements: list = None):
+    try:
+        providers = (await get_unique_providers(db))["providers"]
+        filter_model_response = await filter_model(request, providers)
+        #the model needs to have a minimum amount of information to work with, so we check if the user has provided any filters
+        
+        # Generate prompt and Core filter subquery
+        filtered_prompt, filtered_stmt, filtered_params = filters_to_search_prompt(filter_model_response, providers)
+
+        # Vector embedding
+        query_embedding = model.encode([filtered_prompt])[0].tolist()
+
+        filtered_subquery = filtered_stmt.subquery("filtered")
+        order_expr = filtered_subquery.c.embedding.op("<->")(bindparam("embedding", type_=Vector(384)))
+        final_stmt = (
+            select(filtered_subquery)
+            .order_by(order_expr)
+            .limit(bindparam("k"))
+        )
+
+        result = await db.execute(final_stmt, {
+            **filtered_params,
+            "embedding": query_embedding,
+            "k": k
+        })
+        rows = result.mappings().all()
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="No results found.")
+        results = "\n".join([row_to_text_dict(r) for r in rows])
+
+    
+        return {"results": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Query failed: {e}")
