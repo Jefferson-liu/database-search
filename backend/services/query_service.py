@@ -116,7 +116,7 @@ async def filter_model(request: QueryRequest, providers: list):
 
 
 
-async def query_model(db: AsyncSession, request: QueryRequest, k: int = 20, message_history: list = None):
+async def query_model(db: AsyncSession, request: QueryRequest, k: int = 5, message_history: list = None):
     try:
         providers = (await get_unique_providers(db))["providers"]
         print("Providers: ", providers)
