@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.schemas.message import MessageCreate, MessageOut
+from backend.schemas.message import MessageCreate
 from backend.db.session import get_db
 from backend.services.wechat_service import process_message, get_wechat_history
 

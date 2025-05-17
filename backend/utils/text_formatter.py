@@ -93,3 +93,26 @@ def row_to_text_dict_compressed(row: dict) -> str:
         str(row.get('tier', '') or '')
     ])
 
+def row_to_dict(row) -> dict:
+    return {
+        "item_name": row.item_name,
+        "provider": row.provider,
+        "region": row.region,
+        "condition": row.condition,
+        "channel": row.channel,
+        "line_type": row.line_type,
+        "promotion_price": row.promotion_price,
+        "original_price": row.original_price,
+        "overage_rate": row.overage_rate,
+        "data": row.data,
+        "roaming": row.roaming,
+        "byod_or_term": row.byod_or_term,
+        "free_ld": row.free_ld,
+        "activation_fee": row.activation_fee,
+        "promo_start_date": row.promo_start_date,
+        "promo_end_date": row.promo_end_date,
+        "code": row.code,
+        "tier": row.tier
+    }
+
+

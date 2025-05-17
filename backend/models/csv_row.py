@@ -26,3 +26,30 @@ class CsvRow(Base):
     code = Column(String)
     tier = Column(String)
     embedding = Column(Vector(384))
+
+    def to_dict(self, include_embedding: bool = False) -> dict:
+        d = {
+            "id": self.id,
+            "timestamp": self.timestamp,
+            "item_name": self.item_name,
+            "provider": self.provider,
+            "promo_start_date": self.promo_start_date.isoformat() if self.promo_start_date else None,
+            "promo_end_date": self.promo_end_date.isoformat() if self.promo_end_date else None,
+            "channel": self.channel,
+            "region": self.region,
+            "condition": self.condition,
+            "line_type": self.line_type,
+            "promotion_price": self.promotion_price,
+            "data": self.data,
+            "original_price": self.original_price,
+            "overage_rate": self.overage_rate,
+            "roaming": self.roaming,
+            "byod_or_term": self.byod_or_term,
+            "free_ld": self.free_ld,
+            "activation_fee": self.activation_fee,
+            "code": self.code,
+            "tier": self.tier,
+        }
+        if include_embedding:
+            d["embedding"] = list(self.embedding) if self.embedding is not None else None
+        return d

@@ -3,18 +3,22 @@ from datetime import datetime
 from typing import Optional
 
 class MessageCreate(BaseModel):
-    openid: str
+    openid: str #user id
     direction: str  # 'incoming' or 'outgoing'
     msg_type: Optional[str] = "text"
     content: Optional[str] = None
     msg_id: Optional[str] = None
 
 class MessageOut(BaseModel):
-    id: int
-    direction: str
-    msg_type: str
-    content: Optional[str]
+    openid: str #user id
+    content: str
     created_at: datetime
 
     class Config:
         orm_mode = True
+
+class SearchMessageCreate(BaseModel):
+    user_id: str
+    search_id: str
+    direction: str  # 'incoming' or 'outgoing'
+    content: Optional[str] = None

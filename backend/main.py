@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from backend.api import csv_routes, gpt_routes, wechat_routes
+from backend.api import csv_routes, gpt_routes, wechat_routes, sales_routes
 from backend.db.base import Base
 from backend.db.session import engine
 import os
@@ -42,3 +42,4 @@ app = FastAPI()
 app.include_router(csv_routes.router, prefix="/api/csv")
 app.include_router(gpt_routes.router, prefix="/api/query")
 app.include_router(wechat_routes.router, prefix="/api/wechat")
+app.include_router(sales_routes.router, prefix="/api/sales")
