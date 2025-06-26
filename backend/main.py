@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from backend.api import csv_routes, gpt_routes, wechat_routes, sales_routes
+from fastapi.middleware.cors import CORSMiddleware
+from backend.api import csv_routes, gpt_routes, wechat_routes, sales_routes, webhook_routes
 from backend.db.base import Base
 from backend.db.session import engine
 import os
@@ -38,8 +39,23 @@ if os.getenv("ENV") == "dev":
 
 
 app = FastAPI()
+# Allow frontend (localhost:5173)
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",  # optional if you switch
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 app.include_router(csv_routes.router, prefix="/api/csv")
 app.include_router(gpt_routes.router, prefix="/api/query")
 app.include_router(wechat_routes.router, prefix="/api/wechat")
 app.include_router(sales_routes.router, prefix="/api/sales")
+app.include_router(webhook_routes.router, prefix="/webhook")

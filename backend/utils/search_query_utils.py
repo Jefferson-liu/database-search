@@ -7,12 +7,7 @@ client = OpenAI()
 gpt_model = os.getenv("GPT_MODEL")
 
 def merge_requirements(existing: UserRequirements, new: dict) -> UserRequirements:
-    if existing:
-        for key, value in new.items():
-            if value is not None:
-                setattr(existing, key, value)
-    else:
-        existing = UserRequirements(**new)
+    existing = UserRequirements(**new)
     return existing
 
 

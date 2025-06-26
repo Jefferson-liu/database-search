@@ -36,7 +36,7 @@ async def get_matching_plans(db, req, k=10) -> list[PlanInfo]:
         params["roaming"] = [r.lower() for r in req.roaming]
 
     if req.byod is True:
-        conditions.append(CsvRow.byod_or_term == 1.0)
+        conditions.append(CsvRow.byod_or_term == True)
 
     stmt = select(CsvRow).where(and_(*conditions)).limit(k)
     result = await db.execute(stmt.params(**params))
@@ -46,7 +46,6 @@ async def get_matching_plans(db, req, k=10) -> list[PlanInfo]:
     plans = [PlanInfo(**row_to_dict(r)) for r in rows]
     if not plans:
         raise HTTPException(status_code=404, detail="No matching plans found.")
-
     return plans
 
 
@@ -60,37 +59,65 @@ async def extract_user_requirements(user_input: str) -> dict:
     )
 
     raw = response.choices[0].message.content
+    print("LLM extraction output:", raw)
 
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        print("Parsed extraction:", parsed)
+        return parsed
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"GPT returned invalid JSON: {e}")
 
-async def get_search_results(db, user_input: str, prev_requirements: Optional[UserRequirements] = None, k: int = 10) -> SearchResults:
-    try:
-        new_user_requirements = await extract_user_requirements(user_input)
-    except HTTPException as e:
-        raise e
-
-    if not new_user_requirements:
-        raise HTTPException(status_code=400, detail="No requirements found in the input.")
-
-    # Merge with existing requirements if any
-    merged_requirements = merge_requirements(prev_requirements, new_user_requirements)
-
+async def get_search_results(db, user_input: str, requirements: UserRequirements, k: int = 10):
     # Fetch matching plans
-    if not merged_requirements.is_valid():
+    if not requirements.is_valid():
         return []
     else:
         try:
-            matching_plans = await get_matching_plans(db, merged_requirements, k)
+            matching_plans = await get_matching_plans(db, requirements, k)
         except HTTPException as e:
-            print("[ERROR] Failed in get_matching_plans:", e)
-            raise e
+            # Fallback: try relaxing requirements in order: price, then data, then provider
+            relax_fields_order = [
+                ["target_price"],
+                ["target_data"],
+                ["current_provider"],
+                ["target_price", "target_data"],
+                ["target_price", "current_provider"],
+                ["target_data", "current_provider"],
+                ["target_price", "target_data", "current_provider"]
+            ]
+            fallback_found = False
+            relaxed_fields = None
+            for fields in relax_fields_order:
+                relaxed_req = requirements.model_copy()
+                for field in fields:
+                    setattr(relaxed_req, field, None)
+                if relaxed_req.is_valid():
+                    try:
+                        matching_plans = await get_matching_plans(db, relaxed_req, k)
+                        fallback_found = True
+                        relaxed_fields = fields
+                        break
+                    except HTTPException:
+                        continue
+            if not fallback_found:
+                print("[ERROR] Failed in get_matching_plans (even after relaxing):", e)
+                raise e
+            else:
+                missing_fields = requirements.get_missing_fields()
+                print("Missing fields (fallback):", missing_fields)
+                followup_question = f"No exact matches found. We relaxed the following requirement(s) to find similar plans: {', '.join(relaxed_fields)}."
+                followup_question += " " + await generate_followup_question(missing_fields)
+                results = SearchResults(
+                    plans=matching_plans,
+                    followup=followup_question
+                )
+                return results
 
     followup_question = None
     # Check for missing fields
-    missing_fields = merged_requirements.get_missing_fields()
+    missing_fields = requirements.get_missing_fields()
+    print("Missing fields:", missing_fields)
     if missing_fields:
         try:
             followup_question = await generate_followup_question(missing_fields)

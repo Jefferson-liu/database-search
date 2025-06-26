@@ -24,3 +24,9 @@ class UserRequirements(BaseModel):
         if self.min_data_gb is not None and self.min_data_gb < 0:
             return False
         return True
+
+    def update_fields(self, source: "UserRequirements") -> None:
+        for field in self.__class__.model_fields:
+            value = getattr(source, field, None)
+            if value is not None:
+                setattr(self, field, value)

@@ -109,8 +109,8 @@ def row_to_dict(row) -> dict:
         "byod_or_term": row.byod_or_term,
         "free_ld": row.free_ld,
         "activation_fee": row.activation_fee,
-        "promo_start_date": row.promo_start_date,
-        "promo_end_date": row.promo_end_date,
+        "promo_start_date": row.promo_start_date.isoformat() if row.promo_start_date else None,
+        "promo_end_date": row.promo_end_date.isoformat() if row.promo_end_date else None,
         "code": row.code,
         "tier": row.tier
     }

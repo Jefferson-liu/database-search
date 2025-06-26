@@ -22,3 +22,8 @@ class SearchMessageCreate(BaseModel):
     search_id: str
     direction: str  # 'incoming' or 'outgoing'
     content: Optional[str] = None
+
+class UserSearchCreate(BaseModel):
+    search_id: str
+    user_id: str
+    customer_name: Optional[str] = None

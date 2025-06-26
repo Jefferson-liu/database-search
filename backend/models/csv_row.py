@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, DateTime, Date
+from sqlalchemy import Column, Integer, Float, String, DateTime, Date, Boolean
 from sqlalchemy.dialects.postgresql import ARRAY
 from backend.db.base import Base
 from pgvector.sqlalchemy import Vector
@@ -20,7 +20,7 @@ class CsvRow(Base):
     original_price = Column(Float)
     overage_rate = Column(Float)
     roaming = Column(ARRAY(String))
-    byod_or_term = Column(Float)
+    byod_or_term = Column(Boolean)
     free_ld = Column(String)
     activation_fee = Column(Float)
     code = Column(String)

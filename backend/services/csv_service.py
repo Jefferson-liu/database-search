@@ -71,6 +71,18 @@ def parse_data(data, gb):
         return data
     return None
 
+def parse_byod_or_term(value):
+    if pd.isna(value):
+        return None
+    if isinstance(value, (int, float)):
+        return value == 1.0
+    if isinstance(value, str):
+        value = value.lower().strip()
+        if value in ['1', '1.0', 'true', 'yes']:
+            return True
+        if value in ['2', '2.0', 'false', 'no']:
+            return False
+    return None
 
 async def store_csv_to_db(file: UploadFile, db: AsyncSession) -> str:
     try:
@@ -98,6 +110,7 @@ async def store_csv_to_db(file: UploadFile, db: AsyncSession) -> str:
             record["overage_rate"] = parse_overage_rate(record.get("overage_rate"))
             record["data"] = parse_data(record.get("data"), record.get("gb", ""))
             record["roaming"] = [country.lower().strip() for country in record.get("roaming", "").split(",")] if record.get("roaming") else None
+            record["byod_or_term"] = parse_byod_or_term(record.get("byod_or_term"))
             record.pop("gb", None)
             row = CsvRow(**record)
             db.add(row)
