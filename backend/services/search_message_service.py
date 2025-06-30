@@ -191,20 +191,16 @@ async def get_user_messages(user_id: str, db: AsyncSession):
         })
 
         if plans:
-            entry["plans"][message.id].append(plans)
+            entry["plans"][message.id].extend(plans)
 
     # Convert plans dict to a list of {message_id, plans}
     final_output = []
     for sid, data in grouped.items():
-        plans_list = [
-            {"message_id": mid, "plans": plans}
-            for mid, plans in data["plans"].items()
-        ]
         final_output.append({
             "search_id": sid,
             "customer_name": data["customer_name"],
             "messages": data["messages"],
-            "plans": plans_list
+            "plans": data["plans"]
         })
 
     return final_output

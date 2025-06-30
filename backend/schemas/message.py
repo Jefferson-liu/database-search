@@ -20,7 +20,7 @@ class MessageOut(BaseModel):
 class SearchMessageCreate(BaseModel):
     user_id: str
     search_id: str
-    direction: str  # 'incoming' or 'outgoing'
+    direction: Optional[str] = "incoming"  # 'incoming' or 'outgoing'
     content: Optional[str] = None
 
 class UserSearchCreate(BaseModel):
